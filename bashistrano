@@ -6,38 +6,42 @@ source "$config"
 
 command=${1:-main} # Default to a command called "main"
 
+# TODO Could reduce data transfer by filtering for command (and sourced files)
 user_commands=$(find . -name "*.sh" | grep -v "$config" | xargs cat)
 
 for server in $servers
 do
-    ssh -T ${user}@${server} <<-EOF
-        PATH=/usr/bin:/usr/local/bin:/bin
-        # Make some vars available to user commands
-        cmd_host=${HOSTNAME}
-        cmd_user=${USER}
+    read -r -d '' script <<-EOF
+    set -u
 
-        # Make user's own config available to user commands
-        $(cat $config)
+    PATH=/usr/bin:/usr/local/bin:/bin
+    # Make some vars available to user commands
+    cmd_host=${HOSTNAME}
+    cmd_user=${USER}
 
-        # Make some helper functions available to user commands
-        prnt () {
-            # TODO Get colours to work?
-            local cyan=$(tput setaf 6)
-            local clear=$(tput clear)
-            echo "${cyan}[${user}@${server}]${clear} \$1"
-        }
+    # Make user's own config available to user commands
+    $(cat $config)
 
-        # Default command, can be redefined by user
-        main () {
-            prnt "Hello, world"
-        }
+    # Make some helper functions available to user commands
+    message () {
+        local fg_cyan="\$(tput setaf 6)"
+        local reset="\$(tput sgr0)"
+        echo "\${fg_cyan}[${user}@${server}]\${reset} \$1"
+    }
 
-        prnt "Connected"
+    # Default command, can be redefined by user
+    main () {
+        message "Hello, world"
+    }
 
-        # Define all user commands
-        $user_commands
+    message "Connected"
 
-        prnt "Running '$command' on $server"
-        $command
+    # Define all user commands
+    $user_commands
+
+    message "Running '$command' on $server"
+    $command
 EOF
+
+    ssh -ttq ${user}@${server} "$script"
 done
