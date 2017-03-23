@@ -5,6 +5,7 @@ config=bashistrano_conf.sh
 source "$config"
 
 command=${1:-main} # Default to a command called "main"
+ssh_cmd=${ssh_cmd:-'ssh -ttq'}
 
 # TODO Could reduce data transfer by filtering for command (and sourced files)
 user_commands=$(find . -name "*.sh" | grep -v "$config" | xargs cat)
@@ -14,13 +15,13 @@ do
     read -r -d '' script <<-EOF
     set -u
 
-    PATH=/usr/bin:/usr/local/bin:/bin
     # Make some vars available to user commands
     cmd_host=${HOSTNAME}
     cmd_user=${USER}
 
     # Make user's own config available to user commands
     $(cat $config)
+    PATH="\${remote_PATH:-\$PATH}"
 
     # Make some helper functions available to user commands
     message () {
@@ -43,5 +44,5 @@ do
     $command
 EOF
 
-    ssh -ttq ${user}@${server} "$script"
+    $ssh_cmd ${user}@${server} "$script"
 done
