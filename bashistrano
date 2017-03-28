@@ -1,26 +1,29 @@
 #!/usr/bin/env bash
 
-config=bashistrano_conf.sh
-
-source "$config"
-
 command=${1:-main} # Default to a command called "main"
-ssh_cmd=${ssh_cmd:-'ssh -ttq'}
+target=${2:-local} # Default to fucking up your own box
+
+source "config/default"
+source "config/$target"
+
+ssh_cmd=${ssh_cmd:-'ssh -tt'}
+deploy_dir=${deploy_dir:-/opt/deploy}
+timestamp=$(date +%Y-%m-%dT%H:%M:%S)
+repo=${repo:-git@github.com:cbowdon/bashistrano.git}
 
 # TODO Could reduce data transfer by filtering for command (and sourced files)
-user_commands=$(find . -name "*.sh" | grep -v "$config" | xargs cat)
+user_commands=$(find . -name "*.sh" | grep -v "config/" | xargs cat)
 
 for server in $servers
 do
     read -r -d '' script <<-EOF
-    set -u
-
     # Make some vars available to user commands
-    cmd_host=${HOSTNAME}
-    cmd_user=${USER}
+    cmd_host=$HOSTNAME
+    cmd_user=$USER
 
     # Make user's own config available to user commands
-    $(cat $config)
+    $(cat "config/default")
+    $(cat "config/$target")
     PATH="\${remote_PATH:-\$PATH}"
 
     # Make some helper functions available to user commands
@@ -33,6 +36,17 @@ do
     # Default command, can be redefined by user
     main () {
         message "Hello, world"
+    }
+
+    # Default deploy command
+    deploy () {
+        mkdir -p ${deploy_dir}/releases -x 0755
+        git clone $repo ${deploy_dir}/releases/${timestamp}
+        if [ -L ${deploy_dir}/current ]
+        then
+            ln -sfn $(readlink ${deploy_dir}/current) ${deploy_dir}/rollback
+        fi
+        ln -sfn ${deploy_dir}/releases/${timestamp} ${deploy_dir}/current
     }
 
     message "Connected"
