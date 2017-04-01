@@ -28,7 +28,7 @@ The script takes a /command name/ and a /target environment/. The default comman
 #+END_SRC
 
 ** User config
-Configuration for each target environment is located at =config/<target environment>. These are just shell scripts that get sourced, so put in normal variables (and do any special logic required to initialize these).
+Configuration for each target environment is located at =config/<target environment>=. These are just shell scripts that get sourced, so put in normal variables (and do any special logic required to initialize these).
 
 Some post-processing of the config is done to provide defaults. The reason =ssh= is given the =-tt= option to force a TTY is that it seems to be the only way to get coloured output back.
 
@@ -51,6 +51,8 @@ Users can add arbitrary commands as functions in shell scripts in the same direc
   # TODO Could reduce data transfer by filtering for command (and sourced files)
   user_commands=$(find . -name "*.sh" | grep -v "config/" | xargs cat)
 #+END_SRC
+
+User functions can take advantage of some of the helpers defined in the [[Remote script][remote script]] such as =message= for nice(ish) log messages.
 
 ** Program structure
 The method here is to build up a script with string substitution, loop over the remote servers and pipe it into =ssh=. It's a little known fact that you can feed heredocs into =ssh=.
