@@ -1,0 +1,152 @@
+#+TITLE: Bashistrano
+#+DESCRIPTION: A poor man's Capistrano, in 100 lines of Bash
+
+[[http://capistranorb.com][Capistrano]] is a neat remote server automation and deployment tool. You write commands in an extended Rake DSL (Ruby) and /cap/ will run them over SSH on your target servers. 
+
+It comes with some nifty built-in commands for deploying code from a VCS and prints pretty output, among other things.
+
+The downside is that it requires you to install and know Ruby. Also, isn't the best language for shell commands /Bash/? (Be quiet, Zsh users.)
+
+So here's an experiment to see how much of Capistrano we can quickly recreate in Bash. So far it's got:
+
+- pretty output
+- built-in command to deploy from VCS
+- supports SSH to multiple servers (but not parallel)
+- supports multiple environment configs
+- arbitrary user commands and config
+
+* Guide/code/feature walkthrough
+This has been a learning experience rather than an attempt to make a serious tool, so here's some of the features of the code.
+
+** Arguments
+The script takes a /command name/ and a /target environment/. The default command just prints a greeting.
+
+#+NAME: parse_arguments
+#+BEGIN_SRC shell
+  command=${1:-main} # Default to a command called "main"
+  target=${2:-local} # Default to fucking up your own box
+#+END_SRC
+
+** User config
+Configuration for each target environment is located at =config/<target environment>. These are just shell scripts that get sourced, so put in normal variables (and do any special logic required to initialize these).
+
+Some post-processing of the config is done to provide defaults. The reason =ssh= is given the =-tt= option to force a TTY is that it seems to be the only way to get coloured output back.
+
+#+NAME: load_user_config
+#+BEGIN_SRC shell
+  source "config/default"
+  source "config/$target"
+
+  ssh_cmd=${ssh_cmd:-'ssh -tt'}
+  deploy_dir=${deploy_dir:-/opt/deploy}
+  timestamp=$(date +%Y-%m-%dT%H:%M:%S)
+  repo=${repo:-git@github.com:cbowdon/bashistrano.git}
+#+END_SRC
+
+** User commands
+Users can add arbitrary commands as functions in shell scripts in the same directory. The files are basically sourced, nothing clever here.
+
+#+NAME: load_user_commands
+#+BEGIN_SRC shell
+  # TODO Could reduce data transfer by filtering for command (and sourced files)
+  user_commands=$(find . -name "*.sh" | grep -v "config/" | xargs cat)
+#+END_SRC
+
+** Program structure
+The method here is to build up a script with string substitution, loop over the remote servers and pipe it into =ssh=. It's a little known fact that you can feed heredocs into =ssh=.
+
+#+NAME: overview
+#+BEGIN_SRC shell :tangle bashistrano :noweb yes :padline no
+  #!/usr/bin/env bash
+
+  <<license_header>>
+
+  <<parse_arguments>>
+
+  <<load_user_config>>
+
+  <<load_user_commands>>
+
+  for server in $servers
+  do
+      read -r -d '' script <<-EOF
+
+      <<remote_script>>
+  EOF
+
+      $ssh_cmd ${user}@${server} "$script"
+  done
+#+END_SRC
+
+** Remote script
+The remote script is built by just substituting in the user config and commands. Anything that needs to be considered a variable at the other end is escaped. A few helper functions are rolled in too.
+
+#+NAME: remote_script
+#+BEGIN_SRC shell
+  # Make some vars available to user commands
+  cmd_host=$HOSTNAME
+  cmd_user=$USER
+
+  # Make user's own config available to user commands
+  $(cat "config/default")
+  $(cat "config/$target")
+  PATH="\${remote_PATH:-\$PATH}"
+
+  # Make some helper functions available to user commands
+  message () {
+      local fg_cyan="\$(tput setaf 6)"
+      local reset="\$(tput sgr0)"
+      echo "\${fg_cyan}[${user}@${server}]\${reset} \$1"
+  }
+
+  # Default command, can be redefined by user
+  main () {
+      message "Hello, world"
+  }
+
+  # Default deploy command
+  deploy () {
+      mkdir -p ${deploy_dir}/releases -x 0755
+      git clone $repo ${deploy_dir}/releases/${timestamp}
+      if [ -L ${deploy_dir}/current ]
+      then
+          ln -sfn $(readlink ${deploy_dir}/current) ${deploy_dir}/rollback
+      fi
+      ln -sfn ${deploy_dir}/releases/${timestamp} ${deploy_dir}/current
+  }
+
+  message "Connected"
+
+  # Define all user commands
+  $user_commands
+
+  message "Running '$command' on $server"
+  $command
+#+END_SRC
+
+The deploy command hasn't been well-tested to be honest, since I'd expect almost every user to require their own variation anyway.
+
+** Portability
+I haven't gone out of my way for portability, but have attempted to stick to POSIX most of the time so porting shouldn't be too much effort.
+
+** License 
+[[file:LICENSE][GPLv3]]
+
+#+NAME: license_header
+#+BEGIN_SRC shell
+  # Bashistrano - a remote server automation and deployment tool
+  # Copyright (C) 2017  Chris Bowdon
+
+  # This program is free software: you can redistribute it and/or modify
+  # it under the terms of the GNU General Public License as published by
+  # the Free Software Foundation, either version 3 of the License, or
+  # (at your option) any later version.
+
+  # This program is distributed in the hope that it will be useful,
+  # but WITHOUT ANY WARRANTY; without even the implied warranty of
+  # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  # GNU General Public License for more details.
+
+  # You should have received a copy of the GNU General Public License
+  # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#+END_SRC
