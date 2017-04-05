@@ -1,7 +1,7 @@
 #+TITLE: Bashistrano
 #+DESCRIPTION: A poor man's Capistrano, in 100 lines of Bash
 
-[[http://capistranorb.com][Capistrano]] is a neat remote server automation and deployment tool. You write commands in an extended Rake DSL (Ruby) and /cap/ will run them over SSH on your target servers. 
+[[http://capistranorb.com][Capistrano]] is a neat remote server automation and deployment tool. You write commands in an extended Rake DSL (Ruby) and /cap/ will run them over SSH on your target servers.
 
 It comes with some nifty built-in commands for deploying code from a VCS and prints pretty output, among other things.
 
@@ -15,14 +15,39 @@ So here's an experiment to see how much of Capistrano we can quickly recreate in
 - supports multiple environment configs
 - arbitrary user commands and config
 
+* Usage
+
+#+NAME: usage
+#+BEGIN_SRC shell
+  usage: bashistrano [options] [command] [target]
+
+  Arguments:
+   command        The bash function to run (e.g. deploy, rollback)
+   target         The target environment (e.g. local, staging, production)
+
+  Options:
+   -h --help      Print this message
+   -v --verbose   Print a lot
+#+END_SRC
+
 * Guide/code/feature walkthrough
-This has been a learning experience rather than an attempt to make a serious tool, so here's some of the features of the code.
+This has been a learning experience rather than an attempt to make a serious tool, so here's some of the features of the code. It's also a /literate program/, i.e. the entire program is extracted from this README with =org-babel=.
 
 ** Arguments
 The script takes a /command name/ and a /target environment/. The default command just prints a greeting.
 
 #+NAME: parse_arguments
 #+BEGIN_SRC shell
+  while getopts 'hv' opt
+  do
+      case "$opt" in
+          v) set -x;;
+          ,*) echo "$usage"; exit 0;;
+      esac
+  done
+
+  shift $((OPTIND-1))
+
   command=${1:-main} # Default to a command called "main"
   target=${2:-local} # Default to fucking up your own box
 #+END_SRC
@@ -62,6 +87,10 @@ The method here is to build up a script with string substitution, loop over the 
   #!/usr/bin/env bash
 
   <<license_header>>
+
+  usage="$0 - remote automation tool
+  <<usage>>
+  "
 
   <<parse_arguments>>
 
@@ -131,7 +160,7 @@ The deploy command hasn't been well-tested to be honest, since I'd expect almost
 ** Portability
 I haven't gone out of my way for portability, but have attempted to stick to POSIX most of the time so porting shouldn't be too much effort.
 
-** License 
+** License
 [[file:LICENSE][GPLv3]]
 
 #+NAME: license_header
