@@ -18,7 +18,7 @@ So here's an experiment to see how much of Capistrano we can quickly recreate in
 * Usage
 
 #+NAME: usage
-#+BEGIN_SRC shell
+#+BEGIN_SRC text
   usage: bashistrano [options] [command] [target]
 
   Arguments:
@@ -33,57 +33,11 @@ So here's an experiment to see how much of Capistrano we can quickly recreate in
 * Guide/code/feature walkthrough
 This has been a learning experience rather than an attempt to make a serious tool, so here's some of the features of the code. It's also a /literate program/, i.e. the entire program is extracted from this README with =org-babel=.
 
-** Arguments
-The script takes a /command name/ and a /target environment/. The default command just prints a greeting.
-
-#+NAME: parse_arguments
-#+BEGIN_SRC shell
-  while getopts 'hv' opt
-  do
-      case "$opt" in
-          v) set -x;;
-          ,*) echo "$usage"; exit 0;;
-      esac
-  done
-
-  shift $((OPTIND-1))
-
-  command=${1:-main} # Default to a command called "main"
-  target=${2:-local} # Default to fucking up your own box
-#+END_SRC
-
-** User config
-Configuration for each target environment is located at =config/<target environment>=. These are just shell scripts that get sourced, so put in normal variables (and do any special logic required to initialize these).
-
-Some post-processing of the config is done to provide defaults. The reason =ssh= is given the =-tt= option to force a TTY is that it seems to be the only way to get coloured output back.
-
-#+NAME: load_user_config
-#+BEGIN_SRC shell
-  source "config/default"
-  source "config/$target"
-
-  ssh_cmd=${ssh_cmd:-'ssh -tt'}
-  deploy_dir=${deploy_dir:-/opt/deploy}
-  timestamp=$(date +%Y-%m-%dT%H:%M:%S)
-  repo=${repo:-git@github.com:cbowdon/bashistrano.git}
-#+END_SRC
-
-** User commands
-Users can add arbitrary commands as functions in shell scripts in the same directory. The files are basically sourced, nothing clever here.
-
-#+NAME: load_user_commands
-#+BEGIN_SRC shell
-  # TODO Could reduce data transfer by filtering for command (and sourced files)
-  user_commands=$(find . -name "*.sh" | grep -v "config/" | xargs cat)
-#+END_SRC
-
-User functions can take advantage of some of the helpers defined in the [[Remote script][remote script]] such as =message= for nice(ish) log messages.
-
 ** Program structure
-The method here is to build up a script with string substitution, loop over the remote servers and pipe it into =ssh=. It's a little known fact that you can feed heredocs into =ssh=.
+The method here is to build up a script with string substitution, loop over the remote servers and pipe it into =ssh=. It's a surprisingly little known fact that you can feed strings and heredocs into =ssh=.
 
 #+NAME: overview
-#+BEGIN_SRC shell :tangle bashistrano :noweb yes :padline no
+#+BEGIN_SRC shell-script :tangle bashistrano :tangle-mode (identity #o755) :noweb yes :padline no
   #!/usr/bin/env bash
 
   <<license_header>>
@@ -109,11 +63,57 @@ The method here is to build up a script with string substitution, loop over the 
   done
 #+END_SRC
 
+** Arguments
+The script takes a /command name/ and a /target environment/. The default command just prints a greeting.
+
+#+NAME: parse_arguments
+#+BEGIN_SRC shell-script
+  while getopts 'hv' opt
+  do
+      case "$opt" in
+          v) set -x;;
+          ,*) echo "$usage"; exit 0;;
+      esac
+  done
+
+  shift $((OPTIND-1))
+
+  command=${1:-main} # Default to a command called "main"
+  target=${2:-local} # Default to fucking up your own box
+#+END_SRC
+
+** User config
+Configuration for each target environment is located at =config/<target environment>=. These are just shell scripts that get sourced, so put in normal variables (and do any special logic required to initialize these).
+
+Some post-processing of the config is done to provide defaults. The reason =ssh= is given the =-tt= option to force a TTY is that it seems to be the only way to get coloured output back.
+
+#+NAME: load_user_config
+#+BEGIN_SRC shell-script
+  source "config/default"
+  source "config/$target"
+
+  ssh_cmd=${ssh_cmd:-'ssh -tt'}
+  deploy_dir=${deploy_dir:-/opt/deploy}
+  timestamp=$(date +%Y-%m-%dT%H:%M:%S)
+  repo=${repo:-git@github.com:cbowdon/bashistrano.git}
+#+END_SRC
+
+** User commands
+Users can add arbitrary commands as functions in shell scripts in the same directory. The files are basically sourced, nothing clever here.
+
+#+NAME: load_user_commands
+#+BEGIN_SRC shell-script
+  # TODO Could reduce data transfer by filtering for command (and sourced files)
+  user_commands=$(find . -name "*.sh" | grep -v "config/" | xargs cat)
+#+END_SRC
+
+User functions can take advantage of some of the helpers defined in the [[Remote script][remote script]] such as =message= for nice(ish) log messages.
+
 ** Remote script
 The remote script is built by just substituting in the user config and commands. Anything that needs to be considered a variable at the other end is escaped. A few helper functions are rolled in too.
 
 #+NAME: remote_script
-#+BEGIN_SRC shell
+#+BEGIN_SRC shell-script
   # Make some vars available to user commands
   cmd_host=$HOSTNAME
   cmd_user=$USER
@@ -164,7 +164,7 @@ I haven't gone out of my way for portability, but have attempted to stick to POS
 [[file:LICENSE][GPLv3]]
 
 #+NAME: license_header
-#+BEGIN_SRC shell
+#+BEGIN_SRC shell-script
   # Bashistrano - a remote server automation and deployment tool
   # Copyright (C) 2017  Chris Bowdon
 
